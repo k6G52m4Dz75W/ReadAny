@@ -1,0 +1,57 @@
+diff --git a/lighttpd1.4/src/CMakeLists.txt b/lighttpd1.4/src/CMakeLists.txt
+index c6775976bbc18d6c810de9f8bd228744bf805655..07bd8523bf999cdeecd2aa262808875f0df01b2e 100644
+--- a/lighttpd1.4/src/CMakeLists.txt
++++ b/lighttpd1.4/src/CMakeLists.txt
+@@ -326,13 +326,49 @@ macro(XCONFIG _package _link_FLAGS _cflags)
+ 		set(XCONFIG_EXECUTABLE "${${_package}CONFIG_EXECUTABLE}")
+ 		message(STATUS "found ${_package}: ${XCONFIG_EXECUTABLE}")
+ 
++		# The *-config scripts are POSIX shell scripts. On Windows hosts they
++		# cannot be executed directly (CreateProcess does not honor shebangs),
++		# so run them through a POSIX shell when one is available:
++		#   1. a shell directly on PATH (MSYS2, WSL, ...);
++		#   2. the shell bundled with Git, derived from git.exe's location
++		#      (Git for Windows and GitHub Desktop both ship usr/bin/sh.exe);
++		# otherwise fail with a clear message instead of silently producing
++		# empty flags that break the build later.
++		set(_XCONFIG_PREFIX "")
++		if(CMAKE_HOST_WIN32)
++			find_program(XCONFIG_SHELL NAMES sh bash NO_CMAKE_FIND_ROOT_PATH)
++			if(NOT XCONFIG_SHELL)
++				find_program(GIT_EXECUTABLE NAMES git NO_CMAKE_FIND_ROOT_PATH)
++				if(GIT_EXECUTABLE)
++					get_filename_component(_git_cmd_dir "${GIT_EXECUTABLE}" DIRECTORY)
++					get_filename_component(_git_root "${_git_cmd_dir}" DIRECTORY)
++					foreach(_sh IN ITEMS
++						"${_git_root}/usr/bin/sh.exe"
++						"${_git_root}/bin/sh.exe"
++						"${_git_root}/mingw64/bin/sh.exe")
++						if(EXISTS "${_sh}")
++							set(XCONFIG_SHELL "${_sh}")
++							break()
++						endif()
++					endforeach()
++				endif()
++			endif()
++			if(NOT XCONFIG_SHELL)
++				message(FATAL_ERROR
++					"Cannot run ${_package} on Windows: it is a POSIX shell script "
++					"but no shell was found. Install Git for Windows "
++					"(https://git-scm.com/) or MSYS2 and retry.")
++			endif()
++			set(_XCONFIG_PREFIX "${XCONFIG_SHELL}")
++		endif()
++
+ 		if(${_package} STREQUAL "pcre2-config")
+-			execute_process(COMMAND ${XCONFIG_EXECUTABLE} --libs8 OUTPUT_VARIABLE __link_FLAGS)
++			execute_process(COMMAND ${_XCONFIG_PREFIX} ${XCONFIG_EXECUTABLE} --libs8 OUTPUT_VARIABLE __link_FLAGS)
+ 		else()
+-			execute_process(COMMAND ${XCONFIG_EXECUTABLE} --libs OUTPUT_VARIABLE __link_FLAGS)
++			execute_process(COMMAND ${_XCONFIG_PREFIX} ${XCONFIG_EXECUTABLE} --libs OUTPUT_VARIABLE __link_FLAGS)
+ 		endif()
+ 		string(REPLACE "\n" "" ${_link_FLAGS} ${__link_FLAGS})
+-		execute_process(COMMAND ${XCONFIG_EXECUTABLE} --cflags OUTPUT_VARIABLE __cflags)
++		execute_process(COMMAND ${_XCONFIG_PREFIX} ${XCONFIG_EXECUTABLE} --cflags OUTPUT_VARIABLE __cflags)
+ 		string(REPLACE "\n" "" ${_cflags} ${__cflags})
+ 	else()
+ 		message(STATUS "found ${_package}: no")
