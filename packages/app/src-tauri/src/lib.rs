@@ -8,6 +8,36 @@ use std::sync::Mutex;
 use tauri::Manager;
 use vector::VectorDBState;
 
+#[derive(serde::Serialize)]
+struct WebViewInfo {
+    engine: String,
+    version: String,
+}
+
+/// The WebView runtime's real build number for Settings → About and the
+/// feedback device info. The User-Agent is reduced to a stub on Windows
+/// WebView2 (UA Reduction) and carries frozen fallback tokens for the WebKit
+/// engines, so the runtime's own query is the only reliable source on every
+/// desktop platform. The engine label stays with the frontend's UA parse —
+/// the runtime query has no brand.
+#[tauri::command]
+fn get_webview_version() -> Option<WebViewInfo> {
+    let engine = match std::env::consts::OS {
+        "windows" => "WebView2",
+        "macos" => "WebKit",
+        "linux" => "WebKitGTK",
+        _ => return None,
+    };
+    let version = tauri::webview_version().ok()?.trim().to_string();
+    if version.is_empty() {
+        return None;
+    }
+    Some(WebViewInfo {
+        engine: engine.to_string(),
+        version,
+    })
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -46,6 +76,7 @@ pub fn run() {
             vector::vector_reinit,
             vector::vector_shutdown,
             readany_cli::readany_cli_run,
+            get_webview_version,
         ])
         .setup(|app| {
             let app_handle = app.handle().clone();
