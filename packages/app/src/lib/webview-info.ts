@@ -40,11 +40,11 @@ export async function getWebviewLabel(): Promise<string> {
   if (!engine) return "";
   if (isTauriRuntime()) {
     try {
-      const native = await invoke<{ engine: string; version: string } | null>(
-        "get_webview_version",
-      );
-      if (native?.version) {
-        return formatWebviewInfo({ engine, version: native.version });
+      const native = await invoke<WebviewInfo | null>("get_webview_version");
+      // The runtime's OS→engine mapping is the desktop authority — prefer it
+      // over the UA parse so the two can never disagree on the same machine.
+      if (native?.engine && native.version) {
+        return formatWebviewInfo({ engine: native.engine, version: native.version });
       }
     } catch (error) {
       console.warn("[webview-info] get_webview_version failed, falling back to UA:", error);

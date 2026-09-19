@@ -28,8 +28,19 @@ fn get_webview_version() -> Option<WebViewInfo> {
         "linux" => "WebKitGTK",
         _ => return None,
     };
-    let version = tauri::webview_version().ok()?.trim().to_string();
+    let version = match tauri::webview_version() {
+        Ok(v) => v.trim().to_string(),
+        // A genuine desktop query failure must stay distinguishable from an
+        // unsupported platform: the frontend only logs on invoke rejection,
+        // so a resolved None with no trace would silently degrade to the
+        // UA-reduced version.
+        Err(e) => {
+            eprintln!("[webview-info] webview_version() failed: {e}");
+            return None;
+        }
+    };
     if version.is_empty() {
+        eprintln!("[webview-info] webview_version() returned an empty string");
         return None;
     }
     Some(WebViewInfo {
