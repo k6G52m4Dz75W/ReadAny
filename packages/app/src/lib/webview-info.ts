@@ -4,12 +4,13 @@
  * app can parse the reader WebView's UA with identical results; this wrapper
  * adds the Tauri-runtime check and the runtime version query.
  *
- * The VERSION comes from the Tauri runtime (`tauri::webview_version()`):
- * the User-Agent is reduced to a stub on Windows WebView2 (UA Reduction,
- * e.g. Edg/152.0.0.0 on a 152.0.4191.62 runtime) and carries frozen fallback
- * tokens for the WebKit engines, while the runtime query returns the real
- * build on every desktop platform. Only the ENGINE label stays with the UA
- * parse — the runtime query has no brand.
+ * Inside the Tauri runtime, BOTH the engine label and the version come from
+ * the runtime query (`tauri::webview_version()` + an OS→engine mapping):
+ * the User-Agent is reduced to a stub on Windows WebView2 (UA Reduction) and
+ * carries frozen fallback tokens for the WebKit engines, so the runtime is
+ * the only reliable source on every desktop platform. The UA parse is the
+ * fallback path — plain `vite` dev in a browser or a failed command — where
+ * the version is reduced on WebView2 and frozen on WebKit.
  *
  * Version floors differ per engine (e.g. :has() needs WebView2 ≥ 105 /
  * WebKitGTK ≥ 2.36), which is exactly why the exact build matters. Detection
@@ -31,13 +32,13 @@ export function getWebviewInfo(ua: string = navigator.userAgent): WebviewInfo {
 
 /**
  * Display label for Settings → About, async because the real build number
- * needs a round-trip to the Rust runtime. Falls back to the UA-parsed version
- * (reduced on WebView2) when the query is unavailable — plain `vite` dev in a
- * browser, or a failed command.
+ * needs a round-trip to the Rust runtime. Inside the Tauri runtime the
+ * command's OS→engine mapping + runtime build is the authority (it answers
+ * even when the UA parse comes up empty); the UA parse is the fallback when
+ * the command is unavailable — plain `vite` dev in a browser, or a failed
+ * invoke — with the version reduced on WebView2 in that path.
  */
 export async function getWebviewLabel(): Promise<string> {
-  const { engine, version } = getWebviewInfo();
-  if (!engine) return "";
   if (isTauriRuntime()) {
     try {
       const native = await invoke<WebviewInfo | null>("get_webview_version");
@@ -50,5 +51,6 @@ export async function getWebviewLabel(): Promise<string> {
       console.warn("[webview-info] get_webview_version failed, falling back to UA:", error);
     }
   }
+  const { engine, version } = getWebviewInfo();
   return formatWebviewInfo({ engine, version });
 }

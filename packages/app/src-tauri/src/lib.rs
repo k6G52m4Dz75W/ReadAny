@@ -14,12 +14,11 @@ struct WebViewInfo {
     version: String,
 }
 
-/// The WebView runtime's real build number for Settings → About and the
+/// The WebView engine label + real build number for Settings → About and the
 /// feedback device info. The User-Agent is reduced to a stub on Windows
 /// WebView2 (UA Reduction) and carries frozen fallback tokens for the WebKit
-/// engines, so the runtime's own query is the only reliable source on every
-/// desktop platform. The engine label stays with the frontend's UA parse —
-/// the runtime query has no brand.
+/// engines, so this runtime query is the desktop authority for BOTH fields;
+/// the frontend falls back to its UA parse when this returns None.
 #[tauri::command]
 fn get_webview_version() -> Option<WebViewInfo> {
     let engine = match std::env::consts::OS {
